@@ -8,7 +8,7 @@
     - Fixes Enable-BitLocker parameter set conflict
     - Ensures idempotent execution (safe to re-run)
     - Validates TPM readiness
-    - Complies with DISA STIG WN11-00-000031 / WN11-00-000032
+    - Complies with DISA STIG WN11-00-000030
 
 .NOTES
     Author          : Manuchehr Inoyatov
@@ -19,7 +19,7 @@
     Version         : 1.0
     CVEs            : N/A
     Plugin IDs      : N/A
-    STIG-ID         : WN11-00-000031
+    STIG-ID         : WN11-00-000030
 
 .TESTED ON
     Date(s) Tested  :
@@ -31,7 +31,7 @@
     Run this script as Administrator.
 
     Example:
-    PS C:\> .\STIG-ID-WN11-00-000031.ps1
+    PS C:\> .\STIG-ID-WN11-00-000030.ps1
 #>
 
 # =========================
