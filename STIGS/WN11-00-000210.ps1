@@ -1,5 +1,110 @@
 <#
 .SYNOPSIS
+    Persistently disables Bluetooth on Windows 11 systems.
+
+.DESCRIPTION
+    This script disables Bluetooth services, Bluetooth devices,
+    and Bluetooth policy settings to reduce wireless attack surface
+    and support DISA STIG WN11-00-000210 compliance.
+
+.NOTES
+    Author          : Manuchehr Inoyatov
+    LinkedIn        : https://www.linkedin.com/in/inoyatov-manu/
+    GitHub          : https://github.com/inoyatovmanu
+    Date Created    : 2026-05-12
+    Last Modified   : 2026-05-12
+    Version         : 1.1
+    STIG-ID         : WN11-00-000210
+#>
+
+# =========================
+# 1. AUTO ELEVATION
+# =========================
+$IsAdmin = ([Security.Principal.WindowsPrincipal] `
+    [Security.Principal.WindowsIdentity]::GetCurrent()
+).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $IsAdmin) {
+    Start-Process powershell `
+        -Verb RunAs `
+        -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    exit
+}
+
+# =========================
+# 2. DISABLE BLUETOOTH SERVICES
+# =========================
+$BluetoothServices = @(
+    "bthserv",
+    "BTAGService",
+    "BluetoothUserService"
+)
+
+foreach ($Service in $BluetoothServices) {
+
+    if (Get-Service -Name $Service -ErrorAction SilentlyContinue) {
+
+        Stop-Service `
+            -Name $Service `
+            -Force `
+            -ErrorAction SilentlyContinue
+
+        Set-Service `
+            -Name $Service `
+            -StartupType Disabled
+
+        Write-Host "Disabled service: $Service"
+    }
+}
+
+# =========================
+# 3. DISABLE BLUETOOTH DEVICES
+# =========================
+$BluetoothDevices = Get-PnpDevice |
+Where-Object {
+    $_.Class -eq "Bluetooth" -or
+    $_.FriendlyName -match "Bluetooth"
+}
+
+foreach ($Device in $BluetoothDevices) {
+
+    Disable-PnpDevice `
+        -InstanceId $Device.InstanceId `
+        -Confirm:$false `
+        -ErrorAction SilentlyContinue
+
+    Write-Host "Disabled Bluetooth device: $($Device.FriendlyName)"
+}
+
+# =========================
+# 4. REGISTRY HARDENING
+# =========================
+$RegistryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\bthserv"
+
+Set-ItemProperty `
+    -Path $RegistryPath `
+    -Name "Start" `
+    -Value 4
+
+# =========================
+# 5. FINAL VERIFICATION
+# =========================
+$RemainingDevices = Get-PnpDevice |
+Where-Object {
+    ($_.Class -eq "Bluetooth" -or
+    $_.FriendlyName -match "Bluetooth") `
+    -and $_.Status -eq "OK"
+}
+
+if (-not $RemainingDevices) {
+    Write-Host "COMPLIANT: Bluetooth persistently disabled." `
+        -ForegroundColor Green
+}
+else {
+    Write-Host "WARNING: Some Bluetooth devices may still re-enable after reboot." `
+        -ForegroundColor Yellow
+}<#
+.SYNOPSIS
     Disables Bluetooth functionality on Windows 11 systems.
 
 .DESCRIPTION
