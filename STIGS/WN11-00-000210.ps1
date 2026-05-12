@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-    Persistently disables Bluetooth on Windows 11 systems.
+    Disables Bluetooth on Windows 11 systems.
 
 .DESCRIPTION
     This script disables Bluetooth services, Bluetooth devices,
-    and Bluetooth policy settings to reduce wireless attack surface
-    and support DISA STIG WN11-00-000210 compliance.
+    and enforces the Windows policy setting required for
+    DISA STIG WN11-00-000210 compliance.
 
 .NOTES
     Author          : Manuchehr Inoyatov
@@ -13,7 +13,7 @@
     GitHub          : https://github.com/inoyatovmanu
     Date Created    : 2026-05-12
     Last Modified   : 2026-05-12
-    Version         : 1.1
+    Version         : 2.0
     STIG-ID         : WN11-00-000210
 #>
 
@@ -32,7 +32,24 @@ if (-not $IsAdmin) {
 }
 
 # =========================
-# 2. DISABLE BLUETOOTH SERVICES
+# 2. STIG POLICY REGISTRY KEY
+# =========================
+$RegistryPath = "HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Connectivity"
+
+New-Item `
+    -Path $RegistryPath `
+    -Force | Out-Null
+
+Set-ItemProperty `
+    -Path $RegistryPath `
+    -Name "AllowBluetooth" `
+    -Type DWord `
+    -Value 0
+
+Write-Host "Configured STIG Bluetooth policy registry key"
+
+# =========================
+# 3. DISABLE BLUETOOTH SERVICES
 # =========================
 $BluetoothServices = @(
     "bthserv",
@@ -58,7 +75,7 @@ foreach ($Service in $BluetoothServices) {
 }
 
 # =========================
-# 3. DISABLE BLUETOOTH DEVICES
+# 4. DISABLE BLUETOOTH DEVICES
 # =========================
 $BluetoothDevices = Get-PnpDevice |
 Where-Object {
@@ -73,34 +90,23 @@ foreach ($Device in $BluetoothDevices) {
         -Confirm:$false `
         -ErrorAction SilentlyContinue
 
-    Write-Host "Disabled Bluetooth device: $($Device.FriendlyName)"
+    Write-Host "Disabled device: $($Device.FriendlyName)"
 }
-
-# =========================
-# 4. REGISTRY HARDENING
-# =========================
-$RegistryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\bthserv"
-
-Set-ItemProperty `
-    -Path $RegistryPath `
-    -Name "Start" `
-    -Value 4
 
 # =========================
 # 5. FINAL VERIFICATION
 # =========================
-$RemainingDevices = Get-PnpDevice |
-Where-Object {
-    ($_.Class -eq "Bluetooth" -or
-    $_.FriendlyName -match "Bluetooth") `
-    -and $_.Status -eq "OK"
-}
+$Verify = Get-ItemProperty `
+    -Path $RegistryPath `
+    -Name "AllowBluetooth"
 
-if (-not $RemainingDevices) {
-    Write-Host "COMPLIANT: Bluetooth persistently disabled." `
+if ($Verify.AllowBluetooth -eq 0) {
+
+    Write-Host "COMPLIANT: Bluetooth disabled per STIG policy." `
         -ForegroundColor Green
 }
 else {
-    Write-Host "WARNING: Some Bluetooth devices may still re-enable after reboot." `
-        -ForegroundColor Yellow
+
+    Write-Host "NON-COMPLIANT: Bluetooth policy still enabled." `
+        -ForegroundColor Red
 }
