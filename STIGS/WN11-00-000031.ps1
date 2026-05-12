@@ -7,11 +7,31 @@
     - Prevents duplicate TPM/recovery protector errors
     - Fixes Enable-BitLocker parameter set conflict
     - Ensures idempotent execution (safe to re-run)
+    - Validates TPM readiness
     - Complies with DISA STIG WN11-00-000031 / WN11-00-000032
 
 .NOTES
-    Author  : Manuchehr Inoyatov
-    STIG-ID : WN11-00-000031
+    Author          : Manuchehr Inoyatov
+    LinkedIn        : https://www.linkedin.com/in/inoyatov-manu/
+    GitHub          : https://github.com/inoyatovmanu
+    Date Created    : 2026-05-11
+    Last Modified   : 2026-05-11
+    Version         : 1.0
+    CVEs            : N/A
+    Plugin IDs      : N/A
+    STIG-ID         : WN11-00-000031
+
+.TESTED ON
+    Date(s) Tested  :
+    Tested By       :
+    Systems Tested  :
+    PowerShell Ver. :
+
+.USAGE
+    Run this script as Administrator.
+
+    Example:
+    PS C:\> .\STIG-ID-WN11-00-000031.ps1
 #>
 
 # =========================
@@ -37,15 +57,18 @@ if (-not $TPM.TpmPresent) {
 }
 
 if (-not $TPM.TpmReady) {
-    Write-Host "ERROR: TPM not ready. Enable in BIOS." -ForegroundColor Yellow
+    Write-Host "ERROR: TPM not ready. Enable in BIOS/UEFI." -ForegroundColor Yellow
     exit
 }
 
 # =========================
-# 3. ENABLE BITLOCKER (FIXED PARAMETER ISSUE)
+# 3. GET BITLOCKER STATUS
 # =========================
 $bitlocker = Get-BitLockerVolume -MountPoint "C:"
 
+# =========================
+# 4. ENABLE BITLOCKER (FIXED LOGIC)
+# =========================
 if ($bitlocker.VolumeStatus -eq "FullyDecrypted") {
     Enable-BitLocker `
         -MountPoint "C:" `
@@ -55,8 +78,10 @@ if ($bitlocker.VolumeStatus -eq "FullyDecrypted") {
 }
 
 # =========================
-# 4. TPM PROTECTOR (NO DUPLICATES)
+# 5. TPM PROTECTOR (NO DUPLICATES)
 # =========================
+$bitlocker = Get-BitLockerVolume -MountPoint "C:"
+
 $existingTPM = $bitlocker.KeyProtector | Where-Object {
     $_.KeyProtectorType -eq "Tpm"
 }
@@ -68,7 +93,7 @@ if (-not $existingTPM) {
 }
 
 # =========================
-# 5. RECOVERY KEY PROTECTOR (SAFE)
+# 6. RECOVERY KEY PROTECTOR (NO DUPLICATES)
 # =========================
 $existingRecovery = $bitlocker.KeyProtector | Where-Object {
     $_.KeyProtectorType -eq "RecoveryPassword"
@@ -79,11 +104,11 @@ if (-not $existingRecovery) {
 }
 
 # =========================
-# 6. RESUME ENCRYPTION
+# 7. ENSURE ENCRYPTION RUNS
 # =========================
 Resume-BitLocker -MountPoint "C:"
 
 # =========================
-# 7. STATUS OUTPUT
+# 8. FINAL STATUS
 # =========================
 Get-BitLockerVolume -MountPoint "C:"
