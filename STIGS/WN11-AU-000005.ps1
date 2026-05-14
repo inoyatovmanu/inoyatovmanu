@@ -17,7 +17,7 @@
     GitHub          : https://github.com/inoyatovmanu
     Date Created    : 2026-05-12
     Last Modified   : 2026-05-12
-    Version         : 1.0
+    Version         : 1.1
     CVEs            : N/A
     Plugin IDs      : N/A
     STIG-ID         : WN11-AU-000005
@@ -38,11 +38,13 @@
 # =========================
 # 1. AUTO ELEVATION
 # =========================
-$IsAdmin = ([Security.Principal.WindowsPrincipal] `
-    [Security.Principal.WindowsIdentity]::GetCurrent()
-).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
-if (-not $IsAdmin) {
+$currentUser = New-Object Security.Principal.WindowsPrincipal(
+    [Security.Principal.WindowsIdentity]::GetCurrent()
+)
+
+if (-not $currentUser.IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)) {
 
     Start-Process powershell `
         -Verb RunAs `
@@ -52,40 +54,54 @@ if (-not $IsAdmin) {
 }
 
 # =========================
-# 2. CONFIGURE SECURITY EVENT LOG SIZE
+# 2. CONFIGURE REGISTRY POLICY
 # =========================
 
-# Registry value uses KB
 $RegistryPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\EventLog\Security"
 
-# Create path if missing
+# Create registry path if missing
 New-Item `
     -Path $RegistryPath `
     -Force | Out-Null
 
-# Set log size to 1024000 KB (1 GB)
+# Set Security log size to 1024000 KB (1 GB)
 Set-ItemProperty `
     -Path $RegistryPath `
     -Name "MaxSize" `
     -Type DWord `
     -Value 1024000
 
-Write-Host "Configured Security Event Log registry policy." `
+Write-Host "Configured Security Event Log policy registry value." `
     -ForegroundColor Yellow
 
 # =========================
 # 3. APPLY LIVE EVENT LOG SIZE
 # =========================
 
-# wevtutil uses BYTES
+# wevtutil requires bytes
+# 1024000 KB = 1048576000 bytes
+
 wevtutil sl Security /ms:1048576000
 
-Write-Host "Applied Security Event Log size to live configuration." `
+Write-Host "Applied live Security Event Log size." `
     -ForegroundColor Yellow
 
 # =========================
-# 4. VERIFICATION
+# 4. FORCE POLICY REFRESH
 # =========================
+
+gpupdate /force | Out-Null
+
+# =========================
+# 5. WAIT FOR CONFIGURATION
+# =========================
+
+Start-Sleep -Seconds 5
+
+# =========================
+# 6. VERIFICATION
+# =========================
+
 $RegistryVerify = Get-ItemProperty `
     -Path $RegistryPath `
     -Name "MaxSize"
@@ -99,15 +115,16 @@ Write-Host "Registry MaxSize : $($RegistryVerify.MaxSize) KB"
 $LiveLog | Select-String "maxSize"
 
 # =========================
-# 5. COMPLIANCE CHECK
+# 7. COMPLIANCE CHECK
 # =========================
+
 if ($RegistryVerify.MaxSize -ge 1024000) {
 
-    Write-Host "`nCOMPLIANT: Security Event Log size configured correctly." `
+    Write-Host "`nCOMPLIANT: Security Event Log configured correctly." `
         -ForegroundColor Green
 }
 else {
 
-    Write-Host "`nNON-COMPLIANT: Security Event Log size not configured correctly." `
+    Write-Host "`nNON-COMPLIANT: Security Event Log not configured correctly." `
         -ForegroundColor Red
 }
